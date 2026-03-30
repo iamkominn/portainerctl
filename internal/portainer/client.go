@@ -22,6 +22,7 @@ type Client struct {
 	baseURL    *url.URL
 	httpClient *http.Client
 	token      string
+	apiKey     string
 }
 
 type authRequest struct {
@@ -63,7 +64,15 @@ func (c *Client) Login(ctx context.Context, username, password string) error {
 	}
 
 	c.token = resp.JWT
+	c.apiKey = ""
 	return nil
+}
+
+func (c *Client) SetAPIKey(apiKey string) {
+	c.apiKey = strings.TrimSpace(apiKey)
+	if c.apiKey != "" {
+		c.token = ""
+	}
 }
 
 func (c *Client) ListEnvironments(ctx context.Context) ([]model.Environment, error) {
@@ -117,7 +126,7 @@ func (c *Client) ListStacks(ctx context.Context, endpointID int) ([]model.Stack,
 	filtered := make([]model.Stack, 0, len(stacks))
 	for _, stack := range stacks {
 		if stack.EndpointID == endpointID {
-			stack.Origin = "Portainer"
+			stack.Origin = "Full"
 			filtered = append(filtered, stack)
 		}
 	}
@@ -261,7 +270,9 @@ func (c *Client) do(ctx context.Context, method, apiPath string, query url.Value
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
-	if c.token != "" {
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	} else if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 

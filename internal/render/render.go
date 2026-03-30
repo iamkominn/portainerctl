@@ -13,6 +13,7 @@ import (
 
 var (
 	headerColor = color.New(color.FgCyan, color.Bold)
+	lineColor   = color.New(color.FgHiBlack)
 	okColor     = color.New(color.FgGreen, color.Bold)
 	warnColor   = color.New(color.FgYellow, color.Bold)
 	errColor    = color.New(color.FgRed, color.Bold)
@@ -20,7 +21,8 @@ var (
 
 func Heading(title string) {
 	fmt.Println()
-	headerColor.Printf("== %s ==\n", title)
+	headerColor.Println(title)
+	lineColor.Println(strings.Repeat("─", len(title)))
 }
 
 func Successf(format string, args ...any) {
@@ -37,9 +39,9 @@ func Errorf(format string, args ...any) {
 
 func RenderEnvironments(envs []model.Environment) {
 	tw := newTable()
-	tw.AppendHeader(table.Row{"#", "Name", "Type", "URL", "TLS"})
+	tw.AppendHeader(table.Row{"#", "ID", "Name", "Type", "URL", "TLS"})
 	for i, env := range envs {
-		tw.AppendRow(table.Row{i + 1, env.Name, environmentType(env.Type), firstNonEmpty(env.PublicURL, env.URL), yesNo(env.TLS)})
+		tw.AppendRow(table.Row{i + 1, env.ID, env.Name, environmentType(env.Type), firstNonEmpty(env.PublicURL, env.URL), yesNo(env.TLS)})
 	}
 	fmt.Println(tw.Render())
 }
@@ -129,8 +131,8 @@ func stackType(v int) string {
 
 func coloredStackControl(stack model.Stack) string {
 	switch stackControl(stack) {
-	case "Portainer":
-		return okColor.Sprint("Portainer")
+	case "Full":
+		return okColor.Sprint("Full")
 	case "Limited":
 		return warnColor.Sprint("Limited")
 	default:
@@ -143,10 +145,10 @@ func stackControl(stack model.Stack) string {
 		return stack.Origin
 	}
 	if strings.TrimSpace(stack.CreatedBy) != "" {
-		return "Portainer"
+		return "Full"
 	}
 	if stack.ResourceControl != nil {
-		return "Portainer"
+		return "Full"
 	}
 	return "Limited"
 }

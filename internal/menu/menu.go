@@ -13,13 +13,18 @@ import (
 )
 
 type App struct {
-	client *portainer.Client
+	client            *portainer.Client
+	onEnvironmentPick func(model.Environment) error
 }
 
 const actionDivider = "──────── Actions ────────"
 
 func New(client *portainer.Client) *App {
 	return &App{client: client}
+}
+
+func (a *App) SetEnvironmentPickHandler(fn func(model.Environment) error) {
+	a.onEnvironmentPick = fn
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -37,6 +42,11 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	if selectedEnv.ID == 0 && selectedEnv.Name == "" {
 		return nil
+	}
+	if a.onEnvironmentPick != nil {
+		if err := a.onEnvironmentPick(selectedEnv); err != nil {
+			render.Warningf("Could not save default environment: %v", err)
+		}
 	}
 
 	for {
@@ -66,6 +76,11 @@ func (a *App) Run(ctx context.Context) error {
 			}
 			if selectedEnv.ID == 0 && selectedEnv.Name == "" {
 				return nil
+			}
+			if a.onEnvironmentPick != nil {
+				if err := a.onEnvironmentPick(selectedEnv); err != nil {
+					render.Warningf("Could not save default environment: %v", err)
+				}
 			}
 		case "Exit":
 			return nil
