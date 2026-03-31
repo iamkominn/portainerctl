@@ -171,6 +171,58 @@ func (c *Client) RemoveStack(ctx context.Context, stackID, endpointID int) error
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/stacks/%d", stackID), query)
 }
 
+func (c *Client) GetComposeFile(ctx context.Context, stackID int) (string, error) {
+	u := *c.baseURL
+	u.Path = path.Join(c.baseURL.Path, fmt.Sprintf("/api/stacks/%d/file", stackID))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	} else if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		msg := strings.TrimSpace(string(bodyBytes))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return "", fmt.Errorf("api GET /api/stacks/%d/file: %s", stackID, msg)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	var payload struct {
+		StackFileContent string `json:"StackFileContent"`
+		FileContent      string `json:"FileContent"`
+	}
+	if err := json.Unmarshal(bodyBytes, &payload); err == nil {
+		switch {
+		case strings.TrimSpace(payload.StackFileContent) != "":
+			return payload.StackFileContent, nil
+		case strings.TrimSpace(payload.FileContent) != "":
+			return payload.FileContent, nil
+		}
+	}
+
+	return string(bodyBytes), nil
+}
+
 func (c *Client) ListImages(ctx context.Context, endpointID int) ([]model.Image, error) {
 	var images []model.Image
 	apiPath := fmt.Sprintf("/api/endpoints/%d/docker/images/json", endpointID)

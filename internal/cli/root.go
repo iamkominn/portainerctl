@@ -42,10 +42,10 @@ func NewRootCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.apiKey, "api-key", "", "Portainer API key")
 	cmd.Flags().BoolVar(&opts.insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.AddCommand(newConfigCommand())
-	cmd.AddCommand(newListEnvironmentsCommand(opts))
-	cmd.AddCommand(newListContainersCommand(opts))
-	cmd.AddCommand(newListStacksCommand(opts))
-	cmd.AddCommand(newListImagesCommand(opts))
+	cmd.AddCommand(newEnvironmentCommand(opts))
+	cmd.AddCommand(newContainerCommand(opts))
+	cmd.AddCommand(newStackCommand(opts))
+	cmd.AddCommand(newImageCommand(opts))
 
 	return cmd
 }
@@ -222,6 +222,43 @@ func newConfigCommand() *cobra.Command {
 	return cmd
 }
 
+func newEnvironmentCommand(rootOpts *options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "environment",
+		Short: "Manage Portainer environments",
+	}
+	cmd.AddCommand(newListEnvironmentsCommand(rootOpts))
+	return cmd
+}
+
+func newContainerCommand(rootOpts *options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "container",
+		Short: "Manage containers",
+	}
+	cmd.AddCommand(newListContainersCommand(rootOpts))
+	return cmd
+}
+
+func newStackCommand(rootOpts *options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stack",
+		Short: "Manage stacks",
+	}
+	cmd.AddCommand(newListStacksCommand(rootOpts))
+	cmd.AddCommand(newGetComposeFileCommand(rootOpts))
+	return cmd
+}
+
+func newImageCommand(rootOpts *options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "image",
+		Short: "Manage images",
+	}
+	cmd.AddCommand(newListImagesCommand(rootOpts))
+	return cmd
+}
+
 func newConfigViewCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view",
@@ -378,6 +415,7 @@ func authenticate(ctx context.Context, cfg config.Config, opts options, allowPro
 	if err != nil {
 		return nil, cfg, opts, err
 	}
+	warnInsecureConnection(opts.url, opts.insecure)
 
 	// Prefer API-key auth when available so one-liner commands can run without a
 	// password prompt. Falling back to password keeps the interactive flow usable
@@ -451,7 +489,7 @@ func authenticate(ctx context.Context, cfg config.Config, opts options, allowPro
 func newListEnvironmentsCommand(rootOpts *options) *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
-		Use:   "list-environments",
+		Use:   "ls",
 		Short: "List Portainer environments",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
@@ -474,21 +512,74 @@ func newListEnvironmentsCommand(rootOpts *options) *cobra.Command {
 }
 
 func newListContainersCommand(rootOpts *options) *cobra.Command {
-	return newEnvironmentListCommand(rootOpts, "list-containers", "List containers from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
+	return newEnvironmentListCommand(rootOpts, "ls", "List containers from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
 		return client.ListContainers(ctx, env.ID)
 	}, outputContainers)
 }
 
 func newListStacksCommand(rootOpts *options) *cobra.Command {
-	return newEnvironmentListCommand(rootOpts, "list-stacks", "List stacks from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
+	return newEnvironmentListCommand(rootOpts, "ls", "List stacks from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
 		return client.ListStacks(ctx, env.ID)
 	}, outputStacks)
 }
 
 func newListImagesCommand(rootOpts *options) *cobra.Command {
-	return newEnvironmentListCommand(rootOpts, "list-images", "List images from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
+	return newEnvironmentListCommand(rootOpts, "ls", "List images from the default environment", func(ctx context.Context, client *portainer.Client, env model.Environment) (any, error) {
 		return client.ListImages(ctx, env.ID)
 	}, outputImages)
+}
+
+func newGetComposeFileCommand(rootOpts *options) *cobra.Command {
+	var (
+		stackID int
+		stack   string
+		envID   int
+		envName string
+	)
+	cmd := &cobra.Command{
+		Use:   "view-compose",
+		Short: "Print a stack compose file to stdout",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if stackID == 0 && strings.TrimSpace(stack) == "" {
+				return fmt.Errorf("provide --stack-id or --stack")
+			}
+
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			client, _, _, err := authenticateForStdout(cmd.Context(), cfg, *rootOpts)
+			if err != nil {
+				return err
+			}
+
+			env, err := resolveEnvironment(cmd.Context(), client, cfg, envID, envName)
+			if err != nil {
+				return err
+			}
+
+			selectedStack, err := resolveStack(cmd.Context(), client, env.ID, stackID, stack)
+			if err != nil {
+				return err
+			}
+			if selectedStack.Limited {
+				return fmt.Errorf("compose file retrieval is only available for Full stacks")
+			}
+
+			content, err := client.GetComposeFile(cmd.Context(), selectedStack.ID)
+			if err != nil {
+				return err
+			}
+
+			_, err = fmt.Fprint(os.Stdout, content)
+			return err
+		},
+	}
+	cmd.Flags().IntVar(&stackID, "stack-id", 0, "Stack ID")
+	cmd.Flags().StringVar(&stack, "stack", "", "Stack name")
+	cmd.Flags().IntVar(&envID, "env-id", 0, "Environment ID")
+	cmd.Flags().StringVar(&envName, "env", "", "Environment name")
+	return cmd
 }
 
 func newEnvironmentListCommand(rootOpts *options, use, short string, fetch func(context.Context, *portainer.Client, model.Environment) (any, error), output func(any, string) error) *cobra.Command {
@@ -571,6 +662,31 @@ func resolveEnvironment(ctx context.Context, client *portainer.Client, cfg confi
 	return model.Environment{}, fmt.Errorf("no default environment configured; use --env-id, --env, or select one in the interactive app")
 }
 
+func resolveStack(ctx context.Context, client *portainer.Client, endpointID, stackID int, stackName string) (model.Stack, error) {
+	stacks, err := client.ListStacks(ctx, endpointID)
+	if err != nil {
+		return model.Stack{}, err
+	}
+
+	if stackID > 0 {
+		for _, stack := range stacks {
+			if stack.ID == stackID {
+				return stack, nil
+			}
+		}
+		return model.Stack{}, fmt.Errorf("stack id %d not found", stackID)
+	}
+
+	name := strings.TrimSpace(stackName)
+	for _, stack := range stacks {
+		if strings.EqualFold(stack.Name, name) {
+			return stack, nil
+		}
+	}
+
+	return model.Stack{}, fmt.Errorf("stack %q not found", stackName)
+}
+
 func outputEnvironments(envs []model.Environment, format string) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "json":
@@ -639,4 +755,46 @@ func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+func authenticateForStdout(ctx context.Context, cfg config.Config, opts options) (*portainer.Client, config.Config, options, error) {
+	opts = mergeOptions(cfg, opts)
+	if strings.TrimSpace(opts.url) == "" {
+		return nil, cfg, opts, fmt.Errorf("missing portainer url; set it with --url or `portainerctl config set --url ...`")
+	}
+	if strings.TrimSpace(opts.apiKey) == "" {
+		return nil, cfg, opts, fmt.Errorf("get-compose-file requires an API key so stdout remains clean for redirection")
+	}
+
+	var err error
+	opts.url, err = normalizePortainerURL(opts.url)
+	if err != nil {
+		return nil, cfg, opts, err
+	}
+
+	client, err := portainer.NewClient(opts.url, opts.insecure)
+	if err != nil {
+		return nil, cfg, opts, err
+	}
+	warnInsecureConnection(opts.url, opts.insecure)
+	client.SetAPIKey(opts.apiKey)
+	if _, err := client.ListEnvironments(ctx); err != nil {
+		return nil, cfg, opts, fmt.Errorf("api key authentication failed")
+	}
+
+	return client, cfg, opts, nil
+}
+
+func warnInsecureConnection(rawURL string, insecure bool) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return
+	}
+
+	switch {
+	case strings.EqualFold(parsed.Scheme, "http"):
+		fmt.Fprintln(os.Stderr, "Warning: connecting to Portainer over plain HTTP. Credentials and API traffic are not encrypted.")
+	case strings.EqualFold(parsed.Scheme, "https") && insecure:
+		fmt.Fprintln(os.Stderr, "Warning: connecting to Portainer with TLS verification disabled (--insecure). Server identity is not being verified.")
+	}
 }

@@ -9,7 +9,7 @@ It supports:
 - container actions: start, stop, restart, remove
 - stack actions: start, stop, remove
 - image action: remove
-- one-liner commands such as `list-containers`, `list-stacks`, and `list-images`
+- one-liner commands such as `container ls`, `stack ls`, and `image ls`
 - saved config for URL, username, API key, and default environment
 
 ## Build
@@ -37,18 +37,20 @@ The app can save configuration to:
 ## One-liner commands
 
 ```bash
-./portainerctl list-environments
-./portainerctl list-containers
-./portainerctl list-stacks
-./portainerctl list-images
+./portainerctl environment ls
+./portainerctl container ls
+./portainerctl stack ls
+./portainerctl image ls
+./portainerctl stack view-compose --stack homestack
 ```
 
 Environment selection for one-liners:
 
 ```bash
-./portainerctl list-containers --env local
-./portainerctl list-stacks --env-id 2
-./portainerctl list-images --format json
+./portainerctl container ls --env local
+./portainerctl stack ls --env-id 2
+./portainerctl image ls --format json
+./portainerctl stack view-compose --stack-id 12 --env local > docker-compose.yml
 ```
 
 ## Config management

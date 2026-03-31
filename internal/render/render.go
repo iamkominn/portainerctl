@@ -64,10 +64,11 @@ func RenderContainers(containers []model.Container) {
 
 func RenderStacks(stacks []model.Stack) {
 	tw := newTable()
-	tw.AppendHeader(table.Row{"#", "Name", "Status", "Control", "Created Date", "Updated Date"})
+	tw.AppendHeader(table.Row{"#", "ID", "Name", "Status", "Control", "Created Date", "Updated Date"})
 	for i, stack := range stacks {
 		tw.AppendRow(table.Row{
 			i + 1,
+			displayID(stack.ID),
 			stack.Name,
 			StackStatus(stack.Status),
 			coloredStackControl(stack),
@@ -247,4 +248,11 @@ func yesNo(v bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+func displayID(v int) string {
+	if v == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d", v)
 }
