@@ -18,6 +18,8 @@ It supports:
 go build -o portainerctl ./cmd/portainerctl
 ```
 
+Prebuilt binaries can also be downloaded from the GitHub Releases page.
+
 ## Interactive usage
 
 ```bash
@@ -30,6 +32,7 @@ The app can save configuration to:
 
 - macOS: `~/Library/Application Support/portainerctl/config.json`
 - Linux: `~/.config/portainerctl/config.json`
+- Windows: `%AppData%\portainerctl\config.json`
 
 ## One-liner commands
 

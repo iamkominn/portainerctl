@@ -85,6 +85,8 @@ func Clear() error {
 }
 
 func Path() (string, error) {
+	// UserConfigDir keeps the file in the platform-native config location instead
+	// of hardcoding ~/.config, which differs on macOS and Windows.
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config dir: %w", err)

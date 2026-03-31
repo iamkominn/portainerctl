@@ -136,6 +136,8 @@ func (c *Client) ListStacks(ctx context.Context, endpointID int) ([]model.Stack,
 		return nil, err
 	}
 
+	// Portainer-managed stacks come from /api/stacks, but external Compose
+	// projects only appear in the Docker container labels, so merge both views.
 	known := make(map[string]struct{}, len(filtered))
 	for _, stack := range filtered {
 		known[strings.ToLower(stack.Name)] = struct{}{}
@@ -192,6 +194,8 @@ func (c *Client) listExternalComposeStacks(ctx context.Context, endpointID int) 
 		return nil, err
 	}
 
+	// Standalone Docker Compose projects advertise their stack name via
+	// com.docker.compose.project; Portainer shows those as "Limited" stacks.
 	byProject := map[string][]model.Container{}
 	for _, container := range containers {
 		project := strings.TrimSpace(container.Labels["com.docker.compose.project"])
@@ -271,6 +275,8 @@ func (c *Client) do(ctx context.Context, method, apiPath string, query url.Value
 	}
 	req.Header.Set("Accept", "application/json")
 	if c.apiKey != "" {
+		// Portainer API keys are passed as X-API-Key; JWT sessions continue to use
+		// Authorization: Bearer for /api/auth logins.
 		req.Header.Set("X-API-Key", c.apiKey)
 	} else if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)

@@ -115,6 +115,8 @@ func promptMissingOptions(opts options) (options, error) {
 }
 
 func mergeOptions(cfg config.Config, opts options) options {
+	// CLI flags override saved config; API key also falls back to the env var for
+	// non-interactive use in shells and CI.
 	if strings.TrimSpace(opts.url) == "" {
 		opts.url = cfg.URL
 	}
@@ -377,6 +379,9 @@ func authenticate(ctx context.Context, cfg config.Config, opts options, allowPro
 		return nil, cfg, opts, err
 	}
 
+	// Prefer API-key auth when available so one-liner commands can run without a
+	// password prompt. Falling back to password keeps the interactive flow usable
+	// if the saved key has expired or been revoked.
 	if strings.TrimSpace(opts.apiKey) != "" {
 		client.SetAPIKey(opts.apiKey)
 		if _, err := client.ListEnvironments(ctx); err == nil {
@@ -527,6 +532,8 @@ func resolveEnvironment(ctx context.Context, client *portainer.Client, cfg confi
 		return model.Environment{}, err
 	}
 
+	// Resolution order is explicit flags first, then saved defaults from the
+	// interactive picker or config command.
 	if envID > 0 {
 		for _, env := range envs {
 			if env.ID == envID {

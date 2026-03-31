@@ -44,6 +44,8 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	}
 	if a.onEnvironmentPick != nil {
+		// The CLI remembers the last selected environment so non-interactive list
+		// commands can target it without an explicit flag.
 		if err := a.onEnvironmentPick(selectedEnv); err != nil {
 			render.Warningf("Could not save default environment: %v", err)
 		}
@@ -247,6 +249,8 @@ func (a *App) runStacks(ctx context.Context, env model.Environment) error {
 
 		stack := lookup[choice]
 		if stack.Limited {
+			// Limited stacks are inferred from Docker Compose labels and do not map
+			// cleanly to the Portainer-managed stack lifecycle endpoints.
 			render.Warningf("Limited stacks are detected from Docker Compose labels and are not fully manageable via the current Portainer stack API flow.")
 			action, err := selectOption("Stack action", []string{actionLabel("Back"), actionLabel("Exit")})
 			if err != nil {
